@@ -33,6 +33,8 @@ export default defineConfig([
       'playwright/.auth/',
       '**/.idea',
       '**/.eslintcache',
+      // plugin packaged for the validator (dist copied to a folder named after the plugin id)
+      'xorux-xormon-datasource/',
     ],
   },
   ...baseConfig,

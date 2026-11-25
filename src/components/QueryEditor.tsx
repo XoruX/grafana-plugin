@@ -1,8 +1,27 @@
 import React, { ChangeEvent, useEffect, useState } from 'react';
-import { Button, Checkbox, ColorPicker, InlineField, InlineFieldRow, Input, LoadingPlaceholder, MultiSelect, Select } from '@grafana/ui';
+import {
+  Button,
+  Checkbox,
+  ColorPicker,
+  InlineField,
+  InlineFieldRow,
+  Input,
+  LoadingPlaceholder,
+  MultiSelect,
+  Select,
+} from '@grafana/ui';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { DataSource } from '../datasource';
-import { ArchHwType, ArchItem, ArchMetric, ArchSubsystem, NextGenDataSourceOptions, NextGenQuery, QueryMetric, QueryType } from '../types';
+import {
+  ArchHwType,
+  ArchItem,
+  ArchMetric,
+  ArchSubsystem,
+  NextGenDataSourceOptions,
+  NextGenQuery,
+  QueryMetric,
+  QueryType,
+} from '../types';
 import { XormonUrlEditor } from './XormonUrlEditor';
 
 type Props = QueryEditorProps<DataSource, NextGenQuery, NextGenDataSourceOptions>;
@@ -35,16 +54,47 @@ const SEVERITY_OPTIONS: Array<SelectableValue<string>> = [
   { label: 'Test', value: 'TEST' },
 ];
 
-export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) {
-  const [classes, setClasses] = useState<Array<SelectableValue<string>>>([]);
-  const [hwTypes, setHwTypes] = useState<Array<SelectableValue<string>>>([]);
-  const [subsystems, setSubsystems] = useState<Array<SelectableValue<string>>>([]);
-  const [items, setItems] = useState<ArchItem[]>([]);
-  const [metrics, setMetrics] = useState<ArchMetric[]>([]);
-  const [parentSubsystems, setParentSubsystems] = useState<Array<SelectableValue<string>>>([]);
-  const [parentItems, setParentItems] = useState<ArchItem[]>([]);
-  const [loading, setLoading] = useState<{ [k: string]: boolean }>({});
+const NO_DATA: never[] = [];
 
+/**
+ * A list loaded for a request key, reloaded whenever the key changes; a null key means there is nothing to load.
+ * The state is only set from the promise callbacks (no synchronous setState in the effect): the list and loading
+ * flag are derived from the key the loaded data belongs to, which also drops responses of outdated requests.
+ */
+function useLoadedList<T>(key: string | null, load: () => Promise<T[]>): { data: T[]; loading: boolean } {
+  const [loaded, setLoaded] = useState<{ key: string; data: T[] } | null>(null);
+
+  useEffect(() => {
+    if (key === null) {
+      return;
+    }
+    let current = true;
+    load().then(
+      (data) => {
+        if (current) {
+          setLoaded({ key, data });
+        }
+      },
+      () => {
+        if (current) {
+          setLoaded({ key, data: NO_DATA });
+        }
+      }
+    );
+    return () => {
+      current = false;
+    };
+    // load is a new closure on every render, the key identifies the request
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  if (key === null) {
+    return { data: NO_DATA, loading: false };
+  }
+  return loaded?.key === key ? { data: loaded.data, loading: false } : { data: NO_DATA, loading: true };
+}
+
+export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) {
   const {
     queryType = 'timeseries',
     class: cls,
@@ -72,103 +122,98 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryType, cls]);
 
-  useEffect(() => {
-    setLoading((l) => ({ ...l, classes: true }));
-    datasource
-      .getClasses()
-      .then((res) => setClasses(res.map((c) => ({ label: c.label, value: c.class }))))
-      .finally(() => setLoading((l) => ({ ...l, classes: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const hwTypeParam = skipHwType ? undefined : hwType;
+  const hasHwType = skipHwType || !!hwType;
+  const toOptions = <T,>(list: T[], label: (t: T) => string, value: (t: T) => string): Array<SelectableValue<string>> =>
+    list.map((t) => ({ label: label(t), value: value(t) }));
 
-  useEffect(() => {
-    if (!cls || skipHwType) {
-      setHwTypes([]);
-      return;
-    }
-    setLoading((l) => ({ ...l, hwTypes: true }));
-    datasource
-      .getHwTypes(cls)
-      .then((res: ArchHwType[]) => setHwTypes(res.map((h) => ({ label: h.label, value: h.hw_type }))))
-      .finally(() => setLoading((l) => ({ ...l, hwTypes: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cls, skipHwType]);
+  const classesList = useLoadedList('classes', () =>
+    datasource.getClasses().then((res) =>
+      toOptions(
+        res,
+        (c) => c.label,
+        (c) => c.class
+      )
+    )
+  );
 
-  useEffect(() => {
-    // Capacity uses a fixed subsystem list (see CAPACITY_SUBSYSTEM_OPTIONS) instead of fetching one.
-    if (!cls || queryType === 'capacity' || (!skipHwType && !hwType)) {
-      setSubsystems([]);
-      return;
-    }
-    setLoading((l) => ({ ...l, subsystems: true }));
-    datasource
-      .getSubsystems(cls, skipHwType ? undefined : hwType)
-      .then((res: ArchSubsystem[]) => setSubsystems(res.map((s) => ({ label: s.label, value: s.subsystem }))))
-      .finally(() => setLoading((l) => ({ ...l, subsystems: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cls, hwType, queryType, skipHwType]);
+  const hwTypesList = useLoadedList(!cls || skipHwType ? null : JSON.stringify([cls]), () =>
+    datasource.getHwTypes(cls!).then((res: ArchHwType[]) =>
+      toOptions(
+        res,
+        (h) => h.label,
+        (h) => h.hw_type
+      )
+    )
+  );
 
-  useEffect(() => {
-    // Capacity has no metric selection — it always returns the same fixed set of capacity fields.
-    if (!cls || !subsystem || queryType === 'capacity' || (!skipHwType && !hwType)) {
-      setMetrics([]);
-      return;
-    }
-    setLoading((l) => ({ ...l, metrics: true }));
-    datasource
-      .getMetrics(cls, subsystem, skipHwType ? undefined : hwType)
-      .then(setMetrics)
-      .finally(() => setLoading((l) => ({ ...l, metrics: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cls, hwType, subsystem, queryType, skipHwType]);
+  // Capacity uses a fixed subsystem list (see CAPACITY_SUBSYSTEM_OPTIONS) instead of fetching one.
+  const subsystemsList = useLoadedList(
+    !cls || queryType === 'capacity' || !hasHwType ? null : JSON.stringify([cls, hwTypeParam]),
+    () =>
+      datasource.getSubsystems(cls!, hwTypeParam).then((res: ArchSubsystem[]) =>
+        toOptions(
+          res,
+          (s) => s.label,
+          (s) => s.subsystem
+        )
+      )
+  );
 
-  useEffect(() => {
-    if (!cls || !subsystem || (!skipHwType && !hwType)) {
-      setItems([]);
-      return;
-    }
-    if (filterByParents && !parentItemIds.length) {
-      setItems([]);
-      return;
-    }
-    setLoading((l) => ({ ...l, items: true }));
-    datasource
-      .searchItems({
-        cls,
-        hwType: skipHwType ? undefined : hwType,
-        subsystem,
+  // Capacity has no metric selection — it always returns the same fixed set of capacity fields.
+  const metricsList = useLoadedList<ArchMetric>(
+    !cls || !subsystem || queryType === 'capacity' || !hasHwType ? null : JSON.stringify([cls, subsystem, hwTypeParam]),
+    () => datasource.getMetrics(cls!, subsystem!, hwTypeParam)
+  );
+
+  const itemsList = useLoadedList<ArchItem>(
+    !cls || !subsystem || !hasHwType || (filterByParents && !parentItemIds.length)
+      ? null
+      : JSON.stringify([cls, hwTypeParam, subsystem, filterByParents ? parentItemIdsKey : null]),
+    () =>
+      datasource.searchItems({
+        cls: cls!,
+        hwType: hwTypeParam,
+        subsystem: subsystem!,
         parents: filterByParents ? parentItemIds : undefined,
       })
-      .then(setItems)
-      .finally(() => setLoading((l) => ({ ...l, items: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cls, hwType, subsystem, filterByParents, parentItemIdsKey, skipHwType]);
+  );
 
-  useEffect(() => {
-    if (!filterByParents || !cls || !subsystem) {
-      setParentSubsystems([]);
-      return;
-    }
-    setLoading((l) => ({ ...l, parentSubsystems: true }));
-    datasource
-      .getParentSubsystems(cls, subsystem)
-      .then((res) => setParentSubsystems(res.map((s) => ({ label: s.label, value: s.subsystem }))))
-      .finally(() => setLoading((l) => ({ ...l, parentSubsystems: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterByParents, cls, subsystem]);
+  const parentSubsystemsList = useLoadedList(
+    !filterByParents || !cls || !subsystem ? null : JSON.stringify([cls, subsystem]),
+    () =>
+      datasource.getParentSubsystems(cls!, subsystem!).then((res) =>
+        toOptions(
+          res,
+          (s) => s.label,
+          (s) => s.subsystem
+        )
+      )
+  );
 
-  useEffect(() => {
-    if (!filterByParents || !cls || !parentSubsystem || (!skipHwType && !hwType)) {
-      setParentItems([]);
-      return;
-    }
-    setLoading((l) => ({ ...l, parentItems: true }));
-    datasource
-      .searchItems({ cls, hwType: skipHwType ? undefined : hwType, subsystem: parentSubsystem })
-      .then(setParentItems)
-      .finally(() => setLoading((l) => ({ ...l, parentItems: false })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterByParents, cls, hwType, parentSubsystem, skipHwType]);
+  const parentItemsList = useLoadedList<ArchItem>(
+    !filterByParents || !cls || !parentSubsystem || !hasHwType
+      ? null
+      : JSON.stringify([cls, hwTypeParam, parentSubsystem]),
+    () => datasource.searchItems({ cls: cls!, hwType: hwTypeParam, subsystem: parentSubsystem! })
+  );
+
+  const classes = classesList.data;
+  const hwTypes = hwTypesList.data;
+  const subsystems = subsystemsList.data;
+  const metrics = metricsList.data;
+  const items = itemsList.data;
+  const parentSubsystems = parentSubsystemsList.data;
+  const parentItems = parentItemsList.data;
+  const loading = {
+    classes: classesList.loading,
+    hwTypes: hwTypesList.loading,
+    subsystems: subsystemsList.loading,
+    metrics: metricsList.loading,
+    items: itemsList.loading,
+    parentSubsystems: parentSubsystemsList.loading,
+    parentItems: parentItemsList.loading,
+  };
 
   const onQueryTypeChange = (value: SelectableValue<QueryType>) => {
     const newType = value.value!;
@@ -454,7 +499,11 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
                 />
               )}
             </InlineField>
-            <Button variant="secondary" onClick={allItems ? onClearAllItems : onSelectAllItems} disabled={!allItems && !items.length}>
+            <Button
+              variant="secondary"
+              onClick={allItems ? onClearAllItems : onSelectAllItems}
+              disabled={!allItems && !items.length}
+            >
               {allItems ? 'Choose specific items' : 'Select all'}
             </Button>
           </InlineFieldRow>
@@ -462,7 +511,12 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
           {queryType === 'timeseries' && (
             <>
               <InlineFieldRow>
-                <InlineField label="Metrics" labelWidth={16} grow tooltip="All selected metrics must share the same unit">
+                <InlineField
+                  label="Metrics"
+                  labelWidth={16}
+                  grow
+                  tooltip="All selected metrics must share the same unit"
+                >
                   {loading.metrics ? (
                     <LoadingPlaceholder text="" />
                   ) : (
@@ -481,7 +535,10 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
                 <InlineFieldRow>
                   {selectedMetrics.map((m) => (
                     <InlineField key={m.metric} label={m.label} labelWidth={16}>
-                      <ColorPicker color={m.color ?? 'green'} onChange={(color) => onMetricColorChange(m.metric, color)} />
+                      <ColorPicker
+                        color={m.color ?? 'green'}
+                        onChange={(color) => onMetricColorChange(m.metric, color)}
+                      />
                     </InlineField>
                   ))}
                 </InlineFieldRow>
