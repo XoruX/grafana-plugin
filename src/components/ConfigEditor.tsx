@@ -57,7 +57,7 @@ export function ConfigEditor(props: Props) {
     <>
       <InlineField label="Protocol" labelWidth={16} interactive>
         <Select
-          id="config-editor-protocol"
+          inputId="config-editor-protocol"
           options={PROTOCOL_OPTIONS}
           value={jsonData.protocol ?? 'https'}
           onChange={onProtocolChange}
@@ -82,14 +82,24 @@ export function ConfigEditor(props: Props) {
           width={16}
         />
       </InlineField>
-      <InlineField label="Skip TLS verify" labelWidth={16} interactive tooltip="Enable when the server uses a self-signed certificate">
+      <InlineField
+        label="Skip TLS verify"
+        labelWidth={16}
+        interactive
+        tooltip="Enable when the server uses a self-signed certificate"
+      >
         <InlineSwitch
           id="config-editor-skip-tls-verify"
           value={jsonData.tlsSkipVerify ?? false}
           onChange={onSkipTlsVerifyChange}
         />
       </InlineField>
-      <InlineField label="API Key" labelWidth={16} interactive tooltip="Public API key (Settings > API keys in the XorMon app)">
+      <InlineField
+        label="API Key"
+        labelWidth={16}
+        interactive
+        tooltip="Public API key (Settings > API keys in the XorMon app)"
+      >
         <SecretInput
           required
           id="config-editor-api-key"

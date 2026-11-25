@@ -353,7 +353,13 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
     <>
       <InlineFieldRow>
         <InlineField label="Type" labelWidth={16}>
-          <Select options={TYPE_OPTIONS} value={queryType} onChange={onQueryTypeChange} width={30} />
+          <Select
+            inputId="query-editor-type"
+            options={TYPE_OPTIONS}
+            value={queryType}
+            onChange={onQueryTypeChange}
+            width={30}
+          />
         </InlineField>
       </InlineFieldRow>
 
