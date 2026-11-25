@@ -50,7 +50,8 @@ test('health status query should return the devices', async ({
 }) => {
   const ds = await readProvisionedDataSource({ fileName: 'datasources.yml' });
   await panelEditPage.datasource.set(ds.name);
-  await panelEditPage.setVisualization('Table');
+  // the editor's table view instead of switching the visualization: the visualization picker differs across Grafana versions
+  await panelEditPage.toggleTableView();
 
   await panelEditPage.getQueryEditorRow('A').getByRole('combobox', { name: 'Type', exact: true }).click();
   await panelEditPage
