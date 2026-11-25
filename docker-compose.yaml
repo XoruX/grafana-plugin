@@ -1,0 +1,10 @@
+services:
+  grafana:
+    extends:
+      file: .config/docker-compose-base.yaml
+      service: grafana
+    # NEXTGEN_API_KEY is read from a local .env file (gitignored) and forwarded to the
+    # container so provisioning/datasources/datasources.yml can substitute ${NEXTGEN_API_KEY}
+    # without the real key ever being committed.
+    environment:
+      NEXTGEN_API_KEY: ${NEXTGEN_API_KEY}

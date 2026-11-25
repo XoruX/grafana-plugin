@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: 'XorMon'
+    type: 'xorux-xormon-datasource'
+    access: proxy
+    isDefault: false
+    orgId: 1
+    version: 1
+    editable: true
+    jsonData:
+      protocol: 'https'
+      host: 'host.docker.internal'
+      port: '8443'
+      tlsSkipVerify: true
+    secureJsonData:
+      apiKey: '${NEXTGEN_API_KEY}'
