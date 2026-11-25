@@ -22,7 +22,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: grafana/plugin-actions/build-plugin@build-plugin/v1.2.0
+      - uses: grafana/plugin-actions/build-plugin@build-plugin/v2.0.2
         with:
           # access policy token (scope plugins:write) of the Grafana.com org, saved in the repository secrets;
           # see https://grafana.com/developers/plugin-tools/publish-a-plugin/sign-a-plugin#generate-an-access-policy-token
